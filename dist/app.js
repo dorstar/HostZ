@@ -753,7 +753,7 @@ $('btn-settings').addEventListener('click', async () => {
       <h2>关于</h2>
       <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:4px">
         <span id="about-version" style="font-size:13px;color:var(--text)">HostZ v${config.version||'0.1.0'}</span>
-        <a href="https://github.com/你的用户名/hostz" target="_blank" style="font-size:12px;color:var(--primary)">github.com/你的用户名/hostz</a>
+        <a href="https://github.com/dorstar/hostz" target="_blank" style="font-size:12px;color:var(--primary)">github.com/dorstar/hostz</a>
       </div>
     `;
     el.drawerSettings.style.display='flex';
