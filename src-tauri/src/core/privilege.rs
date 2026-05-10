@@ -18,6 +18,19 @@ pub fn write_system_hosts(system_path: &Path, content: &str) -> Result<()> {
 
     let result = elevate_copy(&tmp_path, system_path);
     let _ = std::fs::remove_file(&tmp_path);
+
+    // 提权后验证是否真正写入成功
+    if result.is_ok() {
+        match std::fs::read_to_string(system_path) {
+            Ok(actual) if actual == content => return Ok(()),
+            Ok(_) => return Err(anyhow::anyhow!(
+                "提权操作未生效，请以管理员身份运行 HostZ"
+            )),
+            Err(_) => return Err(anyhow::anyhow!(
+                "写入后无法读取验证，请以管理员身份运行 HostZ"
+            )),
+        }
+    }
     result
 }
 
