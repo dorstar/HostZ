@@ -21,3 +21,4 @@ reference/
 # Environment
 .env
 .env.local
+CLAUDE.md
