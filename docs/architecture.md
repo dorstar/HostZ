@@ -132,7 +132,7 @@ CREATE TABLE history (id TEXT PRIMARY KEY, content TEXT NOT NULL,
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 ```
 
-**数据目录**: `%APPDATA%/SwitchHosts/data/swh.db` (与原版路径一致)
+**数据目录**: `%APPDATA%/HostZ/data/hostz.db`
 
 ### 3.4 配置模型 (~25 项)
 
@@ -169,7 +169,7 @@ pub struct AppConfig {
 }
 ```
 
-**配置存储**: `%APPDATA%/SwitchHosts/config/cfg.db`
+**配置存储**: `%APPDATA%/HostZ/config/cfg.db`
 
 ## 4. 核心算法
 
@@ -325,7 +325,7 @@ App
 
 | 方法 | 路径 | 响应 |
 |------|------|------|
-| GET | `/` | `"Hello SwitchHosts!"` |
+| GET | `/` | `"Hello HostZ!"` |
 | GET | `/remote-test` | `{"time":"...","content":"#..."}` |
 | GET | `/api/hosts` | `{"success":true,"data":[...]}` |
 | POST | `/api/hosts/{id}/toggle` | `{"id":"...","on":true}` |

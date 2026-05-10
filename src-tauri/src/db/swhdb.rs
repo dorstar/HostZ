@@ -15,7 +15,7 @@ impl SwhDb {
         db
     }
 
-    /// 打开或创建 swh.db
+    /// 打开或创建 hostz.db
     pub fn open() -> Result<Self> {
         let data_dir = platform::data_dir();
         std::fs::create_dir_all(&data_dir)?;

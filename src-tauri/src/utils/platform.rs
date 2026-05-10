@@ -11,9 +11,9 @@ pub fn system_hosts_path() -> PathBuf {
 }
 
 /// 返回应用数据根目录
-/// Windows: %APPDATA%/SwitchHosts
-/// macOS:   ~/Library/Application Support/SwitchHosts
-/// Linux:   ~/.config/SwitchHosts
+/// Windows: %APPDATA%/HostZ
+/// macOS:   ~/Library/Application Support/HostZ
+/// Linux:   ~/.config/HostZ
 pub fn app_data_dir() -> PathBuf {
     if cfg!(target_os = "windows") {
         let appdata = std::env::var("APPDATA").unwrap_or_else(|_| ".".to_string());
