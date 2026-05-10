@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HostZ</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="app">
+  <!-- Top Bar -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <button class="topbar-btn" id="btn-toggle-left" title="切换侧栏">
+        <span class="icon icon-bars"></span>
+      </button>
+      <button class="topbar-btn" id="btn-add" title="添加">
+        <span class="icon icon-plus"></span>
+      </button>
+    </div>
+    <div class="topbar-center">
+      <div class="topbar-title">
+        <span id="topbar-icon" class="hosts-icon"></span>
+        <span id="topbar-name" class="hosts-name">HostZ</span>
+        <span id="topbar-readonly" class="topbar-readonly" style="display:none">只读</span>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <button class="topbar-btn" id="btn-settings" title="设置">
+        <span class="icon icon-gear"></span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div class="main-area">
+    <!-- Left Panel -->
+    <div class="left" id="left-panel">
+      <div class="left-scroll" id="left-scroll">
+        <!-- System Hosts -->
+        <div class="tree-node">
+          <div class="tree-row" data-id="0">
+            <span class="tree-arrow empty"></span>
+            <span class="tree-icon">💻</span>
+            <span class="tree-title">System Hosts</span>
+            <span class="tree-actions"></span>
+          </div>
+        </div>
+        <!-- Hosts Tree -->
+        <div id="hosts-tree"></div>
+        <!-- Trashcan -->
+        <div id="trash-section" class="trash-section" style="display:none">
+          <div class="trash-header" id="trash-header">
+            <span class="icon icon-sm icon-chevron-right" id="trash-arrow"></span>
+            <span class="icon icon-sm icon-trash"></span>
+            <span id="label-trash"></span>
+            <span class="count" id="trash-count">0</span>
+          </div>
+          <div id="trash-list" style="display:none"></div>
+          <button class="btn-default" id="btn-clear-trash" style="display:none;margin-top:4px;width:100%;font-size:11px">清空回收站</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Panel -->
+    <div class="right">
+      <div class="toolbar">
+        <button class="accent" id="btn-apply"></button>
+        <button id="btn-save"></button>
+        <button id="btn-find">
+          <span class="icon icon-sm icon-search"></span>
+          <span id="btn-find-label"></span>
+        </button>
+        <button class="btn-icon" id="btn-refresh" title="刷新远程" style="display:none">
+          <span class="icon icon-sync"></span>
+        </button>
+      </div>
+      <div class="editor-wrap" id="editor-wrap">
+        <textarea id="editor" spellcheck="false"></textarea>
+        <pre id="editor-highlight"></pre>
+      </div>
+      <div class="statusbar">
+        <span id="status-lines">0 行</span>
+        <span id="status-bytes">0 B</span>
+        <span id="status-ro" style="display:none">只读</span>
+        <span class="spacer"></span>
+        <span id="status-sel"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Drawer -->
+  <div class="drawer-overlay" id="drawer-settings" style="display:none">
+    <div class="drawer-panel" id="settings-panel">
+      <div class="drawer-header">
+        <span id="label-settings"></span>
+        <button class="btn-icon" style="margin-left:auto" id="btn-settings-close">
+          <span class="icon icon-x"></span>
+        </button>
+      </div>
+      <div class="drawer-body settings" id="settings-body"></div>
+      <div class="drawer-footer">
+        <button class="btn-default" id="btn-settings-cancel">取消</button>
+        <button class="btn-primary" id="btn-settings-save">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Find Drawer -->
+  <div class="drawer-overlay" id="drawer-find" style="display:none">
+    <div class="drawer-panel" id="find-panel">
+      <div class="drawer-header">
+        <span id="label-find"></span>
+        <button class="btn-icon" style="margin-left:auto" id="btn-find-close">
+          <span class="icon icon-x"></span>
+        </button>
+      </div>
+      <div class="drawer-body">
+        <div class="find-wrap">
+          <input class="find-input" id="find-query" placeholder="关键词（支持正则）">
+          <input class="find-input" id="find-replace" placeholder="替换为…">
+          <div class="find-opts">
+            <label><input type="checkbox" id="find-regex"> <span id="label-find-regex"></span></label>
+            <label><input type="checkbox" id="find-ic" checked> <span id="label-find-ic"></span></label>
+            <span class="spacer"></span>
+            <span style="font-size:12px;color:var(--text-weak)" id="find-total">0 个匹配</span>
+          </div>
+          <div style="display:flex;gap:6px">
+            <button class="btn-primary" id="btn-find-go">查找</button>
+            <button class="btn-default" id="btn-find-replace-all">替换全部</button>
+          </div>
+          <div class="find-results" id="find-results"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Toggle Drawer -->
+  <div class="drawer-overlay" id="drawer-quick" style="display:none">
+    <div class="drawer-panel" style="width:300px">
+      <div class="drawer-header">
+        <span id="label-quick"></span>
+        <button class="btn-icon" style="margin-left:auto" id="btn-quick-close">
+          <span class="icon icon-x"></span>
+        </button>
+      </div>
+      <div class="quick-wrap" id="quick-list"></div>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+# Rust / Cargo
+src-tauri/target/
+target/
+
+# Claude
+.claude/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Reference (original SwitchHosts source - copyrighted)
+reference/
+
+# Environment
+.env
+.env.local
