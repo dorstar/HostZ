@@ -8,7 +8,7 @@
 
 ## 特性
 
-- **极轻量**：二进制 10 MB，内存 < 50 MB，启动 < 1s（原 Electron 版 > 100 MB）
+- **极轻量**：【核心理念：小工具一定要小】。二进制 10 MB，内存 < 10 MB，启动 < 1s（SwitchHosts日常内存200M+，HostZ内存仅为其1/20）
 - **三种条目类型**：本地（可编辑）、远程（HTTP 拉取）、组合（聚合多个条目）
 - **追加/覆盖模式**：追加模式保留系统 hosts 原有内容
 - **语法高亮**：只读模式下注释（绿）、IP（蓝）着色
@@ -22,7 +22,7 @@
 
 ## 安装
 
-从 [Releases](../../releases) 下载 `HostZ_0.1.0_x64-setup.exe`（NSIS 安装包，~3 MB）。
+从 [Releases](../../releases) 下载 `HostZ_1.0.0_x64-setup.exe`（NSIS 安装包，~3 MB）。
 
 或直接运行 `hostz.exe`（便携版，无需安装）。
 
@@ -35,7 +35,7 @@
 cd src-tauri
 cargo tauri build
 
-# 输出：src-tauri/target/release/bundle/nsis/HostZ_0.1.0_x64-setup.exe
+# 输出：src-tauri/target/release/bundle/nsis/HostZ_1.0.0_x64-setup.exe
 ```
 
 ## 技术栈
