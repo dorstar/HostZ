@@ -8,18 +8,13 @@ use crate::models::hosts::{FindItem, FindPosition, HostsType};
 /// 查找选项
 #[derive(Debug, Clone)]
 pub struct FindOptions {
-    /// 是否使用正则表达式
-    pub is_regexp: bool,
     /// 是否忽略大小写
     pub is_ignore_case: bool,
 }
 
 impl Default for FindOptions {
     fn default() -> Self {
-        Self {
-            is_regexp: false,
-            is_ignore_case: false,
-        }
+        Self { is_ignore_case: false }
     }
 }
 
@@ -35,13 +30,8 @@ pub fn find_by(
     let list = swhdb.get_list()?;
     let flat = content_parser::flatten(&list);
 
-    // 构建正则表达式
-    let pattern = if options.is_regexp {
-        query.to_string()
-    } else {
-        regex::escape(query)
-    };
-
+    // 字面搜索（非正则）
+    let pattern = regex::escape(query);
     let regex = RegexBuilder::new(&pattern)
         .case_insensitive(options.is_ignore_case)
         .build()
@@ -116,19 +106,19 @@ fn find_positions_in_content(content: &str, regex: &Regex) -> Vec<FindPosition> 
             .map(|p| line_start + p)
             .unwrap_or(content.len());
 
-        let before = content[line_start..start].to_string();
+        let before = content.get(line_start..start).map(|s| s.to_string()).unwrap_or_default();
         // 如果匹配跨越多行，after 取最后一行匹配结束到行尾的部分
         let after = if end <= line_end {
-            content[end..line_end].to_string()
+            content.get(end..line_end).map(|s| s.to_string()).unwrap_or_default()
         } else {
             let last_line_start = line_starts.get(end_line - 1).copied().unwrap_or(0);
             let last_line_end = content[last_line_start..]
                 .find('\n')
                 .map(|p| last_line_start + p)
                 .unwrap_or(content.len());
-            content[end..last_line_end].to_string()
+            content.get(end..last_line_end).map(|s| s.to_string()).unwrap_or_default()
         };
-        let match_text = content[start..end].to_string();
+        let match_text = content.get(start..end).map(|s| s.to_string()).unwrap_or_default();
 
         positions.push(FindPosition {
             start,
@@ -171,12 +161,7 @@ pub fn find_and_replace_all(
     replacement: &str,
     options: FindOptions,
 ) -> Result<usize> {
-    let pattern = if options.is_regexp {
-        query.to_string()
-    } else {
-        regex::escape(query)
-    };
-
+    let pattern = regex::escape(query);
     let regex = RegexBuilder::new(&pattern)
         .case_insensitive(options.is_ignore_case)
         .build()
@@ -187,7 +172,6 @@ pub fn find_and_replace_all(
     let mut replaced_count = 0;
 
     for item in &flat {
-        // 只替换本地条目，远程/组/文件夹只读
         if item.type_ != HostsType::Local {
             continue;
         }
@@ -197,10 +181,11 @@ pub fn find_and_replace_all(
             Err(_) => continue,
         };
 
-        let new_content = replace_all(&content, &regex, replacement);
-        if new_content != content {
+        let match_count = regex.find_iter(&content).count();
+        if match_count > 0 {
+            let new_content = replace_all(&content, &regex, replacement);
             swhdb.set_content(&item.id, &new_content)?;
-            replaced_count += 1;
+            replaced_count += match_count;
         }
     }
 

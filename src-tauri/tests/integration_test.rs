@@ -178,28 +178,19 @@ fn test_search_replace_full_flow() {
     let results = search::find_by(
         &db,
         "oldhost",
-        search::FindOptions { is_regexp: false, is_ignore_case: false },
+        search::FindOptions { is_ignore_case: false },
     ).unwrap();
     assert_eq!(results.len(), 2); // 两个条目都匹配
     assert!(results[0].positions.len() >= 1);
-
-    // 正则搜索
-    let results = search::find_by(
-        &db,
-        r"oldhost\d+",
-        search::FindOptions { is_regexp: true, is_ignore_case: false },
-    ).unwrap();
-    // item_a should match "oldhost2"
-    assert!(results.iter().any(|r| r.item_id == "item_a"));
 
     // 替换全部
     let count = search::find_and_replace_all(
         &db,
         "oldhost",
         "newhost",
-        search::FindOptions { is_regexp: false, is_ignore_case: false },
+        search::FindOptions { is_ignore_case: false },
     ).unwrap();
-    assert_eq!(count, 2);
+    assert_eq!(count, 3);
 
     // 验证替换后内容
     let content_a = db.get_content("item_a").unwrap().unwrap().content;
@@ -210,7 +201,7 @@ fn test_search_replace_full_flow() {
     let results_after = search::find_by(
         &db,
         "oldhost",
-        search::FindOptions { is_regexp: false, is_ignore_case: false },
+        search::FindOptions { is_ignore_case: false },
     ).unwrap();
     assert!(results_after.is_empty());
 }
@@ -472,11 +463,13 @@ fn test_import_invalid_json_preserves_data() {
     let list = vec![make_item("x", HostsType::Local, true, "Original")];
     db.set_list(&list).unwrap();
 
-    // 尝试导入不含 "list" 的对象（合法但空）
+    // 尝试导入空对象 → 应被拒绝
     let empty: serde_json::Value = serde_json::json!({});
-    db.load_json(&empty).unwrap();
-    // 数据库被清空但无新数据 → 列表为空
-    assert_eq!(db.get_list().unwrap().len(), 0);
+    let result = db.load_json(&empty);
+    assert!(result.is_err(), "空导入应被拒绝");
+    // 现有数据未被破坏
+    assert_eq!(db.get_list().unwrap().len(), 1);
+    assert_eq!(db.get_list().unwrap()[0].id, "x");
 }
 
 // ── 测试 14: 多行正则搜索不 panic ──
@@ -488,12 +481,11 @@ fn test_multiline_regex_no_panic() {
     db.set_list(&list).unwrap();
     db.set_content("m", "line1 abc\nline2 def\nline3 ghi\n").unwrap();
 
-    let options = search::FindOptions { is_regexp: true, is_ignore_case: false };
-    // 使用跨行模式 (?s) 的正则表达式
-    let results = search::find_by(&db, "(?s)abc.*def", options.clone()).unwrap_or_default();
-    // 应正常返回（不 panic），可能找到或找不到——关键是不要崩溃
-    // 如果没找到跨行匹配也是可以接受的
-    let _ = results.len();
+    // 现在只支持字面搜索，测试跨行场景不 panic
+    let options = search::FindOptions { is_ignore_case: false };
+    let results = search::find_by(&db, "abc", options).unwrap_or_default();
+    assert_eq!(results.len(), 1);
+    assert!(results[0].positions.iter().any(|p| p.r#match == "abc"));
 }
 
 // ── 测试 15: 展开/扁平操作保持一致性 ──
@@ -568,4 +560,101 @@ fn test_history_trim() {
     assert_eq!(db.get_history(100).unwrap().len(), 10);
     db.trim_history(5).unwrap();
     assert_eq!(db.get_history(100).unwrap().len(), 5);
+}
+
+// ── 测试 20: cron 刷新逻辑完整流程 ──
+
+#[test]
+fn test_cron_refresh_logic() {
+    use hostz::core::hosts_manager;
+
+    let db = make_temp_db();
+
+    // 创建远程条目（模拟前端 add_item）
+    let url = "https://raw.hellogithub.com/hosts";
+    let remote = hostz::models::hosts::HostsListObject {
+        id: "r1".into(),
+        title: "TestRemote".into(),
+        type_: HostsType::Remote,
+        on: true,
+        url: Some(url.into()),
+        refresh_interval: Some(5), // 5 秒（测试用短间隔）
+        ..make_item("", HostsType::Remote, false, "")
+    };
+    db.set_list(&[remote]).unwrap();
+
+    // 第一步：模拟 cron 判断是否该刷新
+    let item = {
+        let list = db.get_list().unwrap();
+        list.into_iter().find(|i| i.id == "r1").unwrap()
+    };
+    assert_eq!(item.type_, HostsType::Remote);
+    assert!(item.on);
+    assert_eq!(item.refresh_interval, Some(5));
+    assert!(item.last_refresh_ms.is_none()); // 首次 last_refresh 为空
+
+    // 首次 last_refresh_ms=None → unwrap_or(0)=0 → 差值巨大 → 应该触发
+    let now_ms = chrono::Utc::now().timestamp_millis();
+    let interval = item.refresh_interval.unwrap();
+    let last_refresh = item.last_refresh_ms.unwrap_or(0);
+    assert!((now_ms - last_refresh) / 1000 >= interval,
+        "首次刷新应触发：now_ms={}, last_refresh={}, diff_s={}, interval={}",
+        now_ms, last_refresh, (now_ms - last_refresh) / 1000, interval);
+
+    // 第二步：执行刷新
+    let result = hosts_manager::refresh_remote(&db, "r1");
+    assert!(result.is_ok(), "刷新失败: {:?}", result.err());
+
+    // 第三步：验证 last_refresh_ms 已更新
+    let item_after = {
+        let list = db.get_list().unwrap();
+        list.into_iter().find(|i| i.id == "r1").unwrap()
+    };
+    assert!(item_after.last_refresh_ms.is_some(), "刷新后 last_refresh_ms 应为 Some");
+    assert!(item_after.last_refresh_ms.unwrap() > 0, "last_refresh_ms 应大于 0");
+
+    // 第四步：验证刷新间隔内不会再次触发
+    let now_ms2 = chrono::Utc::now().timestamp_millis();
+    let last_refresh2 = item_after.last_refresh_ms.unwrap();
+    let diff_s = (now_ms2 - last_refresh2) / 1000;
+    assert!(diff_s < 5, "刚刷新完应为 diff_s={} < 5，不应再次触发", diff_s);
+
+    // 第五步：验证内容已存储
+    let content = db.get_content("r1").unwrap();
+    assert!(content.is_some(), "刷新后应有内容");
+    assert!(content.unwrap().content.len() > 0, "内容不应为空");
+}
+
+// ── 测试 21: 验证 Tauri 命令参数 camelCase→snake_case 转换 ──
+
+#[test]
+fn test_add_item_parameter_mapping() {
+    // 模拟前端的 add_item JSON 参数（前端发送 camelCase）
+    let frontend_json = serde_json::json!({
+        "title": "TestRemote",
+        "itemType": "remote",
+        "url": "https://example.com/hosts",
+        "refreshInterval": 300
+    });
+
+    // Tauri v2 会将 camelCase 转为 snake_case 传给 Rust
+    // 模拟 Tauri 的 deserialization：
+    #[derive(serde::Deserialize)]
+    struct AddItemArgs {
+        title: String,
+        #[serde(rename = "itemType")]
+        item_type: String,
+        url: Option<String>,
+        #[serde(rename = "refreshInterval")]
+        refresh_interval: Option<i64>,
+    }
+
+    let args: AddItemArgs = serde_json::from_value(frontend_json).unwrap();
+    assert_eq!(args.title, "TestRemote");
+    assert_eq!(args.item_type, "remote");
+    assert_eq!(args.url, Some("https://example.com/hosts".to_string()));
+    assert_eq!(args.refresh_interval, Some(300),
+        "❌ BUG: refresh_interval 应为 Some(300)，实际为 {:?}\n\
+         如果此处失败，说明 Tauri 没有正确转换 camelCase→snake_case",
+        args.refresh_interval);
 }

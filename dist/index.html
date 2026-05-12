@@ -24,6 +24,7 @@
         <span id="topbar-icon" class="hosts-icon"></span>
         <span id="topbar-name" class="hosts-name">HostZ</span>
         <span id="topbar-readonly" class="topbar-readonly" style="display:none">只读</span>
+        <span id="topbar-refreshed" class="topbar-readonly" style="display:none"></span>
       </div>
     </div>
     <div class="topbar-right">
@@ -121,7 +122,6 @@
           <input class="find-input" id="find-query" placeholder="关键词（支持正则）">
           <input class="find-input" id="find-replace" placeholder="替换为…">
           <div class="find-opts">
-            <label><input type="checkbox" id="find-regex"> <span id="label-find-regex"></span></label>
             <label><input type="checkbox" id="find-ic" checked> <span id="label-find-ic"></span></label>
             <span class="spacer"></span>
             <span style="font-size:12px;color:var(--text-weak)" id="find-total">0 个匹配</span>

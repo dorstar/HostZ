@@ -19,6 +19,13 @@ pub fn apply_to_system(swhdb: &SwhDb, cfgdb: &CfgDb) -> Result<()> {
     // 规范化换行符为 LF
     let content = content.replace("\r\n", "\n");
 
+    // 按配置去除重复记录
+    let content = if cfgdb.load_config().map(|c| c.remove_duplicate_records).unwrap_or(false) {
+        content_parser::remove_duplicate_lines(&content)
+    } else {
+        content
+    };
+
     // 读取当前系统 hosts 并规范化为 LF
     let system_path = crate::utils::platform::system_hosts_path();
     let current_content = std::fs::read_to_string(&system_path)
@@ -32,17 +39,17 @@ pub fn apply_to_system(swhdb: &SwhDb, cfgdb: &CfgDb) -> Result<()> {
         WriteMode::Overwrite => content,
     };
 
+    // 检查内容是否有变化（简单比较，在恢复平台换行符之前）
+    if current_content == final_content {
+        return Ok(());
+    }
+
     // 恢复平台换行符
     let final_content = if cfg!(target_os = "windows") {
         final_content.replace('\n', "\r\n")
     } else {
         final_content
     };
-
-    // 检查内容是否有变化（简单比较）
-    if current_content == final_content {
-        return Ok(());
-    }
 
     // 写入系统 hosts
     privilege::write_system_hosts(&system_path, &final_content)?;
@@ -97,6 +104,17 @@ fn get_history_limit(cfgdb: &CfgDb) -> i32 {
         .unwrap_or(50)
 }
 
+/// 拉取远程 hosts 内容
+fn fetch_remote_content(url: &str) -> Result<String> {
+    let response = ureq::get(url)
+        .set("User-Agent", &format!("HostZ/{}", env!("CARGO_PKG_VERSION")))
+        .timeout(std::time::Duration::from_secs(30))
+        .call()
+        .map_err(|e| anyhow::anyhow!("HTTP 请求失败: {}", e))?;
+    response.into_string()
+        .map_err(|e| anyhow::anyhow!("读取响应失败: {}", e))
+}
+
 /// 切换单个条目的启用状态（仅更新数据库，不写系统 hosts）
 pub fn toggle_item(swhdb: &SwhDb, cfgdb: &CfgDb, id: &str) -> Result<bool> {
     let list = swhdb.get_list()?;
@@ -117,6 +135,22 @@ pub fn toggle_item(swhdb: &SwhDb, cfgdb: &CfgDb, id: &str) -> Result<bool> {
     Ok(new_on)
 }
 
+/// 测试用：直接 &SwhDb 的同步刷新（单线程安全）
+pub fn refresh_remote(swhdb: &SwhDb, id: &str) -> Result<()> {
+    let list = swhdb.get_list()?;
+    let item = content_parser::find_item_by_id(&list, id)
+        .ok_or_else(|| anyhow::anyhow!("条目未找到: {}", id))?;
+    let url = item.url.clone()
+        .ok_or_else(|| anyhow::anyhow!("非远程条目，无法刷新"))?;
+    let content = fetch_remote_content(&url)?;
+    swhdb.set_content(id, &content)?;
+    let now_ms = chrono::Utc::now().timestamp_millis();
+    let updated = HostsListObject { last_refresh_ms: Some(now_ms), ..item.clone() };
+    let new_list = content_parser::update_one_item(&list, &updated);
+    swhdb.set_list(&new_list)?;
+    Ok(())
+}
+
 /// 刷新远程 hosts（根据 ID 拉取 URL 内容）
 /// 锁内只读 URL→释放锁→网络请求→重新加锁写入，避免慢网络阻塞所有操作
 pub fn refresh_remote_async(swhdb: &Arc<Mutex<SwhDb>>, id: &str) -> Result<()> {
@@ -131,15 +165,8 @@ pub fn refresh_remote_async(swhdb: &Arc<Mutex<SwhDb>>, id: &str) -> Result<()> {
     };
     // 锁在此处释放
 
-    // 第二步：不加锁请求网络（可能很慢，不阻塞其他操作）
-    let response = ureq::get(&url)
-        .set("User-Agent", &format!("HostZ/{}", env!("CARGO_PKG_VERSION")))
-        .timeout(std::time::Duration::from_secs(30))
-        .call()
-        .map_err(|e| anyhow::anyhow!("HTTP 请求失败: {}", e))?;
-
-    let content = response.into_string()
-        .map_err(|e| anyhow::anyhow!("读取响应失败: {}", e))?;
+    // 第二步：不加锁请求网络（安全拉取：禁用重定向 + 5MB 上限）
+    let content = fetch_remote_content(&url)?;
 
     // 第三步：重新加锁写入结果
     let db = swhdb.lock().map_err(|e| anyhow::anyhow!("锁失败: {}", e))?;

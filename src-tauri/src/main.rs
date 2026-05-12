@@ -116,6 +116,10 @@ fn set_system_hosts_content(content: String) -> Result<(), String> {
 #[tauri::command]
 fn refresh_remote(state: tauri::State<AppState>, id: String) -> Result<(), String> {
     hostz::core::hosts_manager::refresh_remote_async(&state.swhdb, &id)
+        .map_err(|e| e.to_string())?;
+    let swhdb = state.swhdb.lock().map_err(|e| e.to_string())?;
+    let cfgdb = state.cfgdb.lock().map_err(|e| e.to_string())?;
+    hostz::core::hosts_manager::apply_to_system(&swhdb, &cfgdb)
         .map_err(|e| e.to_string())
 }
 
@@ -180,7 +184,7 @@ fn handle_config_side_effects(
 
 // ── 条目管理命令 ──
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 fn add_item(state: tauri::State<AppState>, title: String, item_type: String, url: Option<String>, refresh_interval: Option<i64>) -> Result<String, String> {
     let swhdb = state.swhdb.lock().map_err(|e| e.to_string())?;
     let mut list = swhdb.get_list().map_err(|e| e.to_string())?;
@@ -261,6 +265,18 @@ fn export_data(state: tauri::State<AppState>) -> Result<String, String> {
 
 #[tauri::command]
 fn export_to_file(state: tauri::State<AppState>, path: String) -> Result<(), String> {
+    // 安全检查：仅允许写入到用户通过原生对话框选择的路径
+    let p = std::path::Path::new(&path);
+    if let Some(parent) = p.parent() {
+        if !parent.exists() {
+            return Err("目标目录不存在".to_string());
+        }
+    }
+    // 限制扩展名防止写入任意系统文件
+    let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("");
+    if ext != "json" {
+        return Err("仅允许导出为 .json 文件".to_string());
+    }
     let swhdb = state.swhdb.lock().map_err(|e| e.to_string())?;
     let json = swhdb.to_json().map_err(|e| e.to_string())?;
     let content = serde_json::to_string_pretty(&json).map_err(|e| e.to_string())?;
@@ -276,7 +292,17 @@ fn import_data(state: tauri::State<AppState>, json_str: String) -> Result<(), St
 
 #[tauri::command]
 fn read_file(path: String) -> Result<String, String> {
-    std::fs::read_to_string(&path).map_err(|e| e.to_string())
+    // 安全检查：仅允许读取应用数据目录下的文件
+    let allowed = hostz::utils::platform::app_data_dir();
+    let p = std::path::Path::new(&path);
+    let canonical = p.canonicalize().map_err(|e| format!("路径无效: {}", e))?;
+    if !canonical.starts_with(&allowed) {
+        return Err("不允许访问此路径".to_string());
+    }
+    if !canonical.extension().map_or(false, |e| e == "json") {
+        return Err("仅允许读取 JSON 文件".to_string());
+    }
+    std::fs::read_to_string(&canonical).map_err(|e| e.to_string())
 }
 
 // ── 快捷键命令 ──
@@ -287,12 +313,22 @@ fn get_hotkeys(state: tauri::State<AppState>) -> Result<String, String> {
     serde_json::to_string(&defs).map_err(|e| e.to_string())
 }
 
+// ── 检查更新命令 ──
+
+#[tauri::command]
+fn check_for_update() -> Result<String, String> {
+    let current = env!("CARGO_PKG_VERSION");
+    let info = hostz::services::update::check_update_from_github(current)
+        .map_err(|e| e.to_string())?;
+    serde_json::to_string(&info).map_err(|e| e.to_string())
+}
+
 // ── 搜索替换命令 ──
 
 #[tauri::command]
-fn find_by(state: tauri::State<AppState>, query: String, is_regexp: bool, is_ignore_case: bool) -> Result<String, String> {
+fn find_by(state: tauri::State<AppState>, query: String, is_ignore_case: bool) -> Result<String, String> {
     let swhdb = state.swhdb.lock().map_err(|e| e.to_string())?;
-    let options = hostz::core::search::FindOptions { is_regexp, is_ignore_case };
+    let options = hostz::core::search::FindOptions { is_ignore_case };
     let results = hostz::core::search::find_by(&swhdb, &query, options)
         .map_err(|e| e.to_string())?;
     serde_json::to_string(&results).map_err(|e| e.to_string())
@@ -303,11 +339,10 @@ fn find_and_replace_all(
     state: tauri::State<AppState>,
     query: String,
     replacement: String,
-    is_regexp: bool,
     is_ignore_case: bool,
 ) -> Result<usize, String> {
     let swhdb = state.swhdb.lock().map_err(|e| e.to_string())?;
-    let options = hostz::core::search::FindOptions { is_regexp, is_ignore_case };
+    let options = hostz::core::search::FindOptions { is_ignore_case };
     hostz::core::search::find_and_replace_all(&swhdb, &query, &replacement, options)
         .map_err(|e| e.to_string())
 }
@@ -323,9 +358,10 @@ fn main() -> Result<()> {
     let swhdb = Arc::new(Mutex::new(swhdb));
     let cfgdb = Arc::new(Mutex::new(cfgdb));
 
-    // 克隆 Arc 用于 cron 线程
+    // 克隆 Arc 用于各线程
     let cron_swhdb = Arc::clone(&swhdb);
     let cron_cfgdb = Arc::clone(&cfgdb);
+    let update_cfgdb = Arc::clone(&cfgdb);
 
     let app_state = AppState {
         swhdb,
@@ -351,8 +387,14 @@ fn main() -> Result<()> {
             // 创建系统托盘（根据语言设置显示文本）
             let is_en = {
                 let state = app.state::<AppState>();
-                let cfgdb = state.cfgdb.lock().unwrap();
-                cfgdb.load_config().map(|c| c.locale.as_deref() == Some("en")).unwrap_or(false)
+                let cfgdb = match state.cfgdb.lock() {
+                    Ok(guard) => guard,
+                    Err(e) => {
+                        eprintln!("配置数据库锁失败: {}", e);
+                        e.into_inner()
+                    }
+                };
+                cfgdb.load_config().map(|c| c.locale.as_deref() == Some("en")).unwrap_or_default()
             };
             if let Err(e) = hostz::services::tray::create_tray(app, is_en) {
                 eprintln!("托盘创建失败: {}", e);
@@ -371,6 +413,7 @@ fn main() -> Result<()> {
             let update_running = Arc::new(AtomicBool::new(true));
             hostz::services::update::start_periodic_check(
                 app.handle().clone(),
+                update_cfgdb,
                 update_running,
             );
 
@@ -405,6 +448,7 @@ fn main() -> Result<()> {
             import_data,
             read_file,
             get_hotkeys,
+            check_for_update,
             find_by,
             find_and_replace_all,
         ])

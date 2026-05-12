@@ -140,8 +140,19 @@ impl CfgDb {
             .map(|obj| obj.keys().cloned().collect())
             .unwrap_or_default();
 
-        // 写入每个变更项
+        // 写入每个变更项（仅允许已知配置键）
+        const ALLOWED_KEYS: &[&str] = &[
+            "theme", "locale", "leftPanelWidth", "writeMode", "choiceMode",
+            "historyLimit", "hideAtLaunch", "showTitleOnTray", "removeDuplicateRecords",
+            "autoDownloadUpdate", "hideDockIcon", "trayMiniWindow",
+            "multiChoseFolderSwitchAll", "cmdAfterHostsApply",
+        ];
         if let Some(obj) = partial.as_object() {
+            for key in obj.keys() {
+                if !ALLOWED_KEYS.contains(&key.as_str()) {
+                    return Err(anyhow::anyhow!("未知配置项: {}", key));
+                }
+            }
             let tx = self.conn.unchecked_transaction()?;
             {
                 let mut stmt = tx.prepare(

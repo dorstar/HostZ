@@ -20,10 +20,11 @@
 - **回收站**：软删除 + 恢复 + 永久删除
 - **系统托盘**：关闭窗口最小化到托盘，右键菜单快速操作
 - **写入历史**：每次应用到系统自动记录，支持回看
+- **自动检查更新**：GitHub Releases 检测，手动/自动双模式，新版本弹窗下载
 
 ## 安装
 
-从 [Releases](../../releases) 下载 `HostZ_1.0.0_x64-setup.exe`（NSIS 安装包，~3 MB）。
+从 [Releases](../../releases) 下载 `HostZ_1.0.1_x64-setup.exe`（NSIS 安装包，~3 MB）。
 
 或直接运行 `hostz.exe`（便携版，无需安装）。
 
@@ -36,7 +37,7 @@
 cd src-tauri
 cargo tauri build
 
-# 输出：src-tauri/target/release/bundle/nsis/HostZ_1.0.0_x64-setup.exe
+# 输出：src-tauri/target/release/bundle/nsis/HostZ_1.0.1_x64-setup.exe
 ```
 
 ## 技术栈

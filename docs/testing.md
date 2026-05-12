@@ -1,6 +1,6 @@
 # HostZ 全流程测试文档
 
-> 最后更新：2026-05-10
+> 最后更新：2026-05-12
 
 ## 1. 测试环境
 
@@ -20,7 +20,7 @@ HostZ
 ├── 前端 (dist/)
 │   ├── index.html   — 应用外壳 (150 行)
 │   ├── style.css    — 全局样式 + 深色主题 (550 行)
-│   ├── app.js       — 全部前端逻辑 (780 行)
+│   ├── app.js       — 全部前端逻辑 (~1060 行)
 │   └── icons/       — Octicons SVG (16 个)
 │
 ├── 后端 (src-tauri/src/)
@@ -31,8 +31,8 @@ HostZ
 │   └── utils/       — platform, i18n
 │
 └── 测试
-    ├── 单元测试 (src/core/*_test) — 12 个
-    └── 集成测试 (tests/)          — 19 个
+    ├── 单元测试 (src/core/*_test) — 17 个
+    └── 集成测试 (tests/)          — 21 个
 ```
 
 ## 3. 支持的类型
@@ -47,9 +47,9 @@ HostZ
 
 ## 4. 单元测试
 
-**12 个，全部通过**
+**17 个，全部通过**
 
-### 4.1 content_parser（4 个）
+### 4.1 content_parser（9 个）
 
 | 测试 | 验证点 |
 |------|--------|
@@ -57,6 +57,11 @@ HostZ
 | `test_find_item_by_id` | 按 ID 查找条目 |
 | `test_delete_item_by_id` | 按 ID 删除后列表长度 |
 | `test_set_on_state_single_choice` | choice_mode=1 互斥逻辑（单选关其他） |
+| `test_remove_duplicate_lines_basic` | 去除重复 (IP, hostname) 行 |
+| `test_remove_duplicate_lines_keeps_comments` | 注释行不参与去重 |
+| `test_remove_duplicate_lines_different_ip_same_host` | 不同 IP 同主机名均保留 |
+| `test_remove_duplicate_lines_empty` | 空字符串处理 |
+| `test_remove_duplicate_lines_preserves_newlines` | 空行与尾部换行保留 | |
 
 ### 4.2 hosts_manager（2 个）
 
@@ -83,7 +88,7 @@ HostZ
 
 ## 5. 集成测试
 
-**19 个，全部通过**
+**21 个，全部通过**
 
 ### 5.1 原有测试（9 个）
 
@@ -92,14 +97,14 @@ HostZ
 | 1 | `test_full_crud_lifecycle` | 内容写入→读取→覆盖→列表写入→验证→删除 |
 | 2 | `test_content_resolution_recursive` | local 直接内容、group 组合聚合（`# file:` 头） |
 | 3 | `test_trashcan_full_flow` | 移入回收站→恢复→永久删除→验证 hosts_content 清理 |
-| 4 | `test_search_replace_full_flow` | 查找→正则→替换→验证不再有匹配 |
+| 4 | `test_search_replace_full_flow` | 查找→替换→验证不再有匹配 |
 | 5 | `test_remote_refresh` | HTTP 拉取→存储→验证 last_refresh_ms |
 | 6 | `test_toggle_logic` | 单选模式互斥 + 多选模式允许多开 |
 | 7 | `test_config_full_flow` | 默认值→保存→加载→部分更新→camelCase 键验证 |
 | 8 | `test_get_enabled_content` | 仅 on=true 条目的内容出现在输出中 |
 | 9 | `test_system_paths` | Windows/macOS/Linux 系统 hosts 路径正确性 |
 
-### 5.2 审查后新增（10 个）
+### 5.2 审查后新增（12 个）
 
 | # | 测试 | 覆盖 Bug 修复 |
 |---|------|-------------|
@@ -113,6 +118,8 @@ HostZ
 | 17 | `test_search_empty_content` | 空内容条目被搜索跳过 |
 | 18 | `test_config_set_get_roundtrip` | 配置写入→读取一致性 |
 | 19 | `test_history_trim` | 历史记录按 limit 裁剪 |
+| 20 | `test_cron_refresh_logic` | Cron 时间间隔计算、过期判断、on/off/interval/url 过滤 |
+| 21 | `test_add_item_parameter_mapping` | Tauri camelCase 参数转换（前端→后端 refreshInterval→refresh_interval） |
 
 ## 6. 前端手动测试清单
 
@@ -146,7 +153,6 @@ HostZ
 
 - [ ] Ctrl+F / 工具栏按钮打开查找面板
 - [ ] 字面搜索返回匹配列表（显示匹配行 + 条目名）
-- [ ] 正则搜索
 - [ ] 忽略大小写
 - [ ] 替换全部（仅本地条目生效）
 - [ ] 点击结果行跳转到对应条目
@@ -159,6 +165,7 @@ HostZ
 - [ ] 写入模式（追加 / 覆盖）
 - [ ] 选择模式（单选 / 多选）
 - [ ] 历史记录上限
+- [ ] 删除重复记录复选框（开启/关闭→保存→重新打开验证状态）
 - [ ] 导入/导出数据
 - [ ] 写入历史查看
 
@@ -180,9 +187,10 @@ HostZ
 ### 6.8 远程刷新
 
 - [ ] 创建远程条目（URL + 刷新间隔）
-- [ ] 右键/工具栏按钮刷新 → 拉取内容 → toast "刷新成功"
+- [ ] 右键/工具栏按钮刷新 → 拉取内容 → 自动应用到系统 → toast "刷新成功"
 - [ ] 失败时 toast "刷新失败: xxx"
-- [ ] 后台 cron 自动定时刷新
+- [ ] 后台 cron 自动定时刷新（`cron_tick` 事件可监听诊断）
+- [ ] Cron 刷新失败时前端收到 `cron_error` 事件
 
 ### 6.9 导入导出
 
@@ -212,7 +220,15 @@ HostZ
 | 普通用户运行 → UAC 点"否" | 返回错误"请以管理员身份运行" |
 | PowerShell 窗口 | 不显示（`CREATE_NO_WINDOW`） |
 
-## 8. 测试命令
+## 8. 卸载数据清理测试（Windows NSIS）
+
+| 场景 | 预期 |
+|------|------|
+| 卸载 → 不勾选"Delete user data" | `%APPDATA%\HostZ\` 保留 |
+| 卸载 → 勾选"Delete user data" | `%APPDATA%\HostZ\` 被删除 |
+| 卸载后重新安装 | 应用正常初始化，创建新的 `hostz.db` + `cfg.db` |
+
+## 9. 测试命令
 
 ```bash
 # 后端编译检查
@@ -234,19 +250,19 @@ cargo test test_toggle_logic
 cargo tauri build
 ```
 
-## 9. 测试结果汇总
+## 10. 测试结果汇总
 
 | 类别 | 数量 | 通过 |
 |------|------|------|
-| content_parser | 4 | ✅ 4 |
+| content_parser | 9 | ✅ 9 |
 | hosts_manager | 2 | ✅ 2 |
 | trash | 1 | ✅ 1 |
 | search | 5 | ✅ 5 |
 | 集成（原有） | 9 | ✅ 9 |
-| 集成（新增） | 10 | ✅ 10 |
-| **合计** | **31** | **31** |
+| 集成（新增） | 12 | ✅ 12 |
+| **合计** | **38** | **38** |
 
-## 10. 已知限制
+## 11. 已知限制
 
 1. **GUI 测试**: Tauri 窗口需要桌面环境，无自动化 GUI 测试
 2. **托盘测试**: 系统托盘依赖平台 API，需手动验证
@@ -255,3 +271,4 @@ cargo tauri build
 5. **测试数据清理**: `%TEMP%\hostz_test\` 下的测试数据库文件不会自动清理
 6. **i18n**: 翻译模块是占位，`t()` 返回原始 key
 7. **更新检查**: Tauri updater 未接入，`check_update()` 始终返回 false
+8. **卸载数据清理**: NSIS 卸载时"Delete user data"通过自定义 hook 删除 `%APPDATA%\HostZ`，需手动验证

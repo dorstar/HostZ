@@ -380,6 +380,8 @@ a:hover { opacity: 0.8; }
 }
 .find-row:hover { background: var(--tree-hover); }
 .find-row.selected { background: var(--tree-selected); }
+.find-header { font-weight:600; font-size:12px; color:var(--text-weak); border-bottom:2px solid var(--border-0); padding-bottom:4px; margin-bottom:2px; cursor:default; }
+.find-header:hover { background:transparent; }
 .find-match { font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .find-match mark { background: var(--highlight); }
 .find-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 4px; }
@@ -490,7 +492,9 @@ a:hover { opacity: 0.8; }
 .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ═══ EDITOR HIGHLIGHT ═══ */
+.editor-wrap { position: relative; }
 .editor-wrap textarea, .editor-wrap pre {
+  position: absolute; inset: 0;
   width: 100%; height: 100%;
   padding: 8px 10px;
   margin: 0; border: none; outline: none;
@@ -499,18 +503,35 @@ a:hover { opacity: 0.8; }
   overflow: auto;
 }
 .editor-wrap textarea {
-  background: var(--editor-bg);
-  color: var(--editor-text);
+  background: transparent;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  caret-color: var(--editor-text);
+  z-index: 2;
   resize: none;
-  display: block;
+}
+.editor-wrap textarea::placeholder {
+  -webkit-text-fill-color: var(--text-weak);
+  color: var(--text-weak);
+}
+.editor-wrap textarea::selection {
+  color: var(--text-reverse);
+  -webkit-text-fill-color: var(--editor-text);
+  background: var(--primary);
 }
 .editor-wrap textarea.readonly { display: none; }
 .editor-wrap pre {
-  background: var(--editor-ro-bg);
+  background: var(--editor-bg);
   color: var(--editor-text);
-  display: none;
+  z-index: 1;
+  pointer-events: none;
+  user-select: none;
 }
-.editor-wrap textarea.readonly + pre { display: block; }
+.editor-wrap textarea.readonly + pre {
+  background: var(--editor-ro-bg);
+  pointer-events: auto;
+  user-select: text;
+}
 .hl-comment { color: var(--editor-comment); }
 .hl-ip { color: var(--editor-ip); font-weight: 500; }
 .hl-host { color: var(--text); }

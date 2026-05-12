@@ -3,8 +3,7 @@ use std::path::PathBuf;
 /// 返回系统 hosts 文件路径
 pub fn system_hosts_path() -> PathBuf {
     if cfg!(target_os = "windows") {
-        let windir = std::env::var("windir").unwrap_or_else(|_| "C:\\Windows".to_string());
-        PathBuf::from(windir).join("System32").join("drivers").join("etc").join("hosts")
+        PathBuf::from("C:\\Windows").join("System32").join("drivers").join("etc").join("hosts")
     } else {
         PathBuf::from("/etc/hosts")
     }

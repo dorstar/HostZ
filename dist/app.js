@@ -51,12 +51,12 @@ const MSG = {
     panelWidth:'左侧面板宽度', writeMode:'写入模式',
     append:'追加（推荐）', overwrite:'覆盖', choiceMode:'选择模式',
     multi:'多选', single:'单选', historyLimit:'历史记录上限',
-    removeDup:'删除重复记录（待开发）', autoUpdate:'自动检查更新（待开发）',
+    removeDup:'删除重复记录', autoUpdate:'自动检查更新',
     genData:'数据', genExport:'导出数据', genImport:'导入数据',
     genHistory:'写入历史', genUpdate:'更新', appearance:'外观',
     hostsWrite:'Hosts 写入', language:'语言', zh:'简体中文', en:'English',
-    findQuery:'关键词（支持正则）', findReplace:'替换为…',
-    findRegex:'正则', findIC:'忽略大小写', findBtn:'查找',
+    findQuery:'关键词', findReplace:'替换为…',
+    findIC:'忽略大小写', findBtn:'查找', findMatch:'匹配内容', findItem:'所在条目', findLine:'行号',
     findReplaceAll:'替换全部', findReplaced:'已替换', findCount:'个条目',
     paste:'粘贴', selectAll:'全选',
     historyTitle:'Hosts 写入历史', historyEmpty:'暂无记录',
@@ -65,6 +65,7 @@ const MSG = {
     editorPlaceholder:'选择一个条目查看内容…',
     interval5:'5 分钟', interval15:'15 分钟', interval30:'30 分钟',
     interval1h:'1 小时', interval24h:'24 小时', interval3d:'3 天',
+    newVersionAvail:'发现新版本',
   },
   'en': {
     apply:'Apply to System', save:'Save', cancel:'Cancel', close:'Close',
@@ -95,12 +96,12 @@ const MSG = {
     panelWidth:'Left Panel Width', writeMode:'Write Mode',
     append:'Append (recommended)', overwrite:'Overwrite', choiceMode:'Choice Mode',
     multi:'Multiple', single:'Single', historyLimit:'History Limit',
-    removeDup:'Remove Duplicates (TBD)', autoUpdate:'Auto Check Updates (TBD)',
+    removeDup:'Remove Duplicates', autoUpdate:'Auto Check Updates',
     genData:'Data', genExport:'Export Data', genImport:'Import Data',
     genHistory:'Write History', genUpdate:'Update', appearance:'Appearance',
     hostsWrite:'Hosts Write', language:'Language', zh:'Simplified Chinese', en:'English',
-    findQuery:'Keywords (regex supported)', findReplace:'Replace with…',
-    findRegex:'Regex', findIC:'Ignore Case', findBtn:'Find',
+    findQuery:'Keywords', findReplace:'Replace with…',
+    findIC:'Ignore Case', findBtn:'Find', findMatch:'Match', findItem:'Item', findLine:'Line',
     findReplaceAll:'Replace All', findReplaced:'Replaced', findCount:' items',
     paste:'Paste', selectAll:'Select All',
     historyTitle:'Hosts Write History', historyEmpty:'No records',
@@ -131,7 +132,6 @@ function applyLocale() {
   const fr = $('find-replace'); if (fr) fr.placeholder = tr('findReplace');
   const fgo = $('btn-find-go'); if (fgo) fgo.textContent = tr('findBtn');
   const fra = $('btn-find-replace-all'); if (fra) fra.textContent = tr('findReplaceAll');
-  const fRg = $('label-find-regex'); if (fRg) fRg.textContent = tr('findRegex');
   const fIc = $('label-find-ic'); if (fIc) fIc.textContent = tr('findIC');
   // Status bar
   const sRO = $('status-ro'); if (sRO) sRO.textContent = tr('statusRO');
@@ -222,7 +222,7 @@ const el = {
   trashSection: $('trash-section'), trashCount: $('trash-count'), trashArrow: $('trash-arrow'), trashList: $('trash-list'),
   drawerSettings: $('drawer-settings'), drawerFind: $('drawer-find'), drawerQuick: $('drawer-quick'),
   quickList: $('quick-list'), findQuery: $('find-query'), findReplace: $('find-replace'),
-  findRegex: $('find-regex'), findIC: $('find-ic'), findTotal: $('find-total'), findResults: $('find-results'),
+  findIC: $('find-ic'), findTotal: $('find-total'), findResults: $('find-results'),
   settingsBody: $('settings-body'),
 };
 
@@ -392,6 +392,7 @@ async function selectItem(id) {
   if (id === '0') {
     el.topbarIcon.innerHTML = ''; el.topbarName.textContent = tr('systemHosts');
     el.topbarRO.style.display = ''; isReadonly = true;
+    $('topbar-refreshed').style.display = 'none';
     setEditorMeta(true, false);
     try { const c = await ipc0('get_system_hosts_content'); setEditor(c, true); }
     catch(e) { setEditor('# Error: ' + e, true); }
@@ -404,6 +405,17 @@ async function selectItem(id) {
   el.topbarIcon.innerHTML = item ? typeIcon(item.type) : '';
   el.topbarName.textContent = item ? item.title : '???';
   el.topbarRO.style.display = ro ? '' : 'none';
+  // 远程条目显示最后刷新时间
+  const refEl = $('topbar-refreshed');
+  if (item && item.type === 'remote' && item.lastRefreshMs) {
+    const d = new Date(item.lastRefreshMs);
+    const t = d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    const dt = d.toLocaleDateString([], {month:'2-digit', day:'2-digit'});
+    refEl.textContent = '刷新于 ' + dt + ' ' + t;
+    refEl.style.display = '';
+  } else {
+    refEl.style.display = 'none';
+  }
   setEditorMeta(ro, item && item.type === 'remote');
   try { const c = await ipc1('get_hosts_content', id); setEditor(c, ro); }
   catch(e) { setEditor('# Error: ' + e, true); }
@@ -420,7 +432,7 @@ function setEditor(content, ro) {
   el.editor.value = content || '';
   el.editor.classList.toggle('readonly', ro);
   el.statusRO.style.display = ro ? '' : 'none';
-  el.editorHL.innerHTML = highlightHosts(content);
+  el.editorHL.innerHTML = highlightHosts(content || '');
   updateStatus();
 }
 
@@ -469,7 +481,13 @@ $('btn-save').addEventListener('click', async () => {
   await loadData();
 });
 
-$('btn-find').addEventListener('click', () => { el.drawerFind.style.display='flex'; });
+$('btn-find').addEventListener('click', () => {
+  el.findQuery.value = '';
+  el.findReplace.value = '';
+  el.findTotal.textContent = '0 ' + tr('findMatches');
+  el.findResults.innerHTML = '';
+  el.drawerFind.style.display='flex';
+});
 
 $('btn-refresh').addEventListener('click', async () => {
   if (!currentItem || currentItem.type !== 'remote') return;
@@ -741,9 +759,10 @@ $('btn-settings').addEventListener('click', async () => {
       <div class="setting-row"><span>${tr('choiceMode')}</span>
         <select id="cfg-choice"><option value="2" ${(config.choiceMode||2)==2?'selected':''}>${tr('multi')}</option><option value="1" ${config.choiceMode==1?'selected':''}>${tr('single')}</option></select></div>
       <div class="setting-row"><span>${tr('historyLimit')}</span><input type="number" id="cfg-history" value="${config.historyLimit||50}"></div>
-      <div class="setting-row"><span>${tr('removeDup')}</span><input type="checkbox" id="cfg-rm-dup" disabled></div>
+      <div class="setting-row"><span>${tr('removeDup')}</span><input type="checkbox" id="cfg-rm-dup" ${config.removeDuplicateRecords?'checked':''}></div>
       <h2>${tr('genUpdate')}</h2>
-      <div class="setting-row"><span>${tr('autoUpdate')}</span><input type="checkbox" id="cfg-update" disabled></div>
+      <div class="setting-row"><span>${tr('autoUpdate')}</span><input type="checkbox" id="cfg-update" ${config.autoDownloadUpdate?'checked':''}></div>
+      <div class="setting-row"><button class="btn-default" id="btn-check-update">${currentLocale==='zh-CN'?'立即检查':'Check Now'}</button></div>
       <h2>${tr('genData')}</h2>
       <div class="setting-row" style="gap:8px">
         <button class="btn-default" id="btn-export">${tr('genExport')}</button>
@@ -765,6 +784,34 @@ $('btn-settings').addEventListener('click', async () => {
     if (btnExp) btnExp.addEventListener('click', doExport);
     if (btnImp) btnImp.addEventListener('click', doImport);
     if (btnHist) btnHist.addEventListener('click', () => { el.drawerSettings.style.display='none'; showHistory(); });
+    const btnCheckUpdate = document.getElementById('btn-check-update');
+    if (btnCheckUpdate) {
+      btnCheckUpdate.addEventListener('click', async () => {
+        btnCheckUpdate.disabled = true;
+        btnCheckUpdate.textContent = currentLocale==='zh-CN' ? '检查中…' : 'Checking…';
+        try {
+          const raw = await ipc0('check_for_update');
+          const info = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          if (info.has_update) {
+            el.drawerSettings.style.display='none';
+            // 直接触发 new_version 事件复用弹窗逻辑
+            window.__TAURI__?.event?.emit('new_version', {
+              current: info.current_version,
+              latest: info.latest_version,
+              url: info.download_url,
+              notes: info.release_notes,
+            });
+          } else {
+            toast(currentLocale==='zh-CN' ? `已是最新版本 (${info.current_version})` : `Already latest (${info.current_version})`, 'success');
+          }
+        } catch(e) {
+          toast(currentLocale==='zh-CN' ? '检查更新失败' : 'Check failed', 'error');
+        } finally {
+          btnCheckUpdate.disabled = false;
+          btnCheckUpdate.textContent = currentLocale==='zh-CN' ? '立即检查' : 'Check Now';
+        }
+      });
+    }
   } catch(e) { console.error('Settings load failed:', e); }
 });
 
@@ -825,11 +872,13 @@ function applyTheme(theme) {
 $('btn-find-go').addEventListener('click', async () => {
   const q = el.findQuery.value; if (!q) return;
   try {
-    const raw = await ipc('find_by', {query: q, isRegexp: el.findRegex.checked, isIgnoreCase: el.findIC.checked});
+    const raw = await ipc('find_by', {query: q, isIgnoreCase: el.findIC.checked});
     const items = typeof raw === 'string' ? JSON.parse(raw) : raw;
     const total = items.reduce((s, r) => s + r.positions.length, 0);
     el.findTotal.textContent = total + tr('findMatches');
-    el.findResults.innerHTML = items.flatMap(r =>
+    el.findResults.innerHTML = (total > 0
+      ? `<div class="find-row find-header"><span>${tr('findMatch')}</span><span>${tr('findItem')}</span><span>${tr('findLine')}</span></div>`
+      : '') + items.flatMap(r =>
       r.positions.map(p => `
         <div class="find-row" data-id="${esc(r.itemId)}">
           <div class="find-match">${esc(p.before)}<mark>${esc(p.match)}</mark>${esc(p.after)}</div>
@@ -848,10 +897,14 @@ $('btn-find-replace-all').addEventListener('click', async () => {
   try {
     const count = await ipc('find_and_replace_all', {
       query: q, replacement: el.findReplace.value,
-      isRegexp: el.findRegex.checked, isIgnoreCase: el.findIC.checked,
+      isIgnoreCase: el.findIC.checked,
     });
-    toast(tr('findReplaced') + ' ' + count + ' ' + tr('findCount'));
-    el.drawerFind.style.display='none';
+    toast(tr('findReplaced') + ' ' + count + tr('findMatches'));
+    el.drawerFind.style.display = 'none';
+    if (currentId && currentId !== '0' && !isReadonly) {
+      try { const c = await ipc1('get_hosts_content', currentId); setEditor(c, false); }
+      catch(e) {}
+    }
   } catch(e) { toast(tr('opFailed'), 'error'); }
 });
 
@@ -956,11 +1009,30 @@ $('left-scroll').addEventListener('contextmenu', e => {
   });
 });
 
-// ── Editor input ──
-el.editor.addEventListener('input', updateStatus);
+// ── Editor input & scroll sync ──
+el.editor.addEventListener('input', () => {
+  el.editorHL.innerHTML = highlightHosts(el.editor.value);
+  updateStatus();
+});
+el.editor.addEventListener('scroll', () => {
+  el.editorHL.scrollTop = el.editor.scrollTop;
+  el.editorHL.scrollLeft = el.editor.scrollLeft;
+});
+// Tab 键插入缩进
+el.editor.addEventListener('keydown', e => {
+  if (e.key === 'Tab' && !el.editor.classList.contains('readonly')) {
+    e.preventDefault();
+    const s = el.editor.selectionStart;
+    el.editor.value = el.editor.value.substring(0, s) + '\t' + el.editor.value.substring(el.editor.selectionEnd);
+    el.editor.selectionStart = el.editor.selectionEnd = s + 1;
+    el.editorHL.innerHTML = highlightHosts(el.editor.value);
+  }
+});
 
-// ── Find Enter ──
-el.findQuery.addEventListener('keydown', function(e) { if (e.key==='Enter') $('btn-find-go').click(); });
+// ── Find Enter & Tab ──
+const insertTab = (ed) => { const s=ed.selectionStart; ed.value=ed.value.substring(0,s)+'\t'+ed.value.substring(ed.selectionEnd); ed.selectionStart=ed.selectionEnd=s+1; };
+el.findQuery.addEventListener('keydown', function(e) { if (e.key==='Enter') $('btn-find-go').click(); if (e.key==='Tab') { e.preventDefault(); insertTab(el.findQuery); } });
+el.findReplace.addEventListener('keydown', function(e) { if (e.key==='Tab') { e.preventDefault(); insertTab(el.findReplace); } });
 
 // ── Panel resize ──
 (function initResize() {
@@ -988,7 +1060,41 @@ try {
     window.__TAURI__.event.listen('show_preferences', () => $('btn-settings').click());
     window.__TAURI__.event.listen('show_quick_toggle', showQuickToggle);
     window.__TAURI__.event.listen('trigger_check_update', () => toast(tr('autoUpdate') + '…'));
+    window.__TAURI__.event.listen('new_version', (e) => {
+      const { current, latest, url, notes } = e.payload;
+      const title = currentLocale === 'zh-CN' ? '发现新版本' : 'New Version Available';
+      const msg = currentLocale === 'zh-CN'
+        ? `HostZ ${current} → ${latest}`
+        : `HostZ ${current} → ${latest}`;
+      const notesLabel = currentLocale === 'zh-CN' ? '更新说明' : 'Release Notes';
+      const downloadLabel = currentLocale === 'zh-CN' ? '前往下载' : 'Download';
+
+      let html = `<div class="modal-overlay" id="modal-update">
+        <div class="modal-box" style="max-width:420px">
+          <div class="modal-h">${title}</div>
+          <div class="modal-b">
+            <p style="margin:0 0 12px;font-size:14px">${esc(msg)}</p>
+            ${notes ? `<details style="margin-bottom:12px"><summary style="cursor:pointer;color:var(--primary);font-size:12px">${notesLabel}</summary><pre style="margin:8px 0 0;font-size:12px;white-space:pre-wrap;max-height:150px;overflow:auto;background:var(--bg-secondary);padding:8px;border-radius:4px">${esc(notes)}</pre></details>` : ''}
+          </div>
+          <div class="modal-f">
+            <button class="btn-default" id="modal-update-close">${tr('close')}</button>
+            <button class="btn-primary" id="modal-update-download">${downloadLabel}</button>
+          </div>
+        </div>
+      </div>`;
+      document.body.insertAdjacentHTML('beforeend', html);
+      document.getElementById('modal-update-close').addEventListener('click', () => document.getElementById('modal-update').remove());
+      document.getElementById('modal-update-download').addEventListener('click', () => {
+        window.open(url, '_blank');
+        document.getElementById('modal-update').remove();
+      });
+      document.getElementById('modal-update').addEventListener('click', function(e) { if (e.target === this) this.remove(); });
+    });
     window.__TAURI__.event.listen('reload_list', loadData);
+    window.__TAURI__.event.listen('hosts_refreshed', (e) => {
+      const item = findItem(hostsList, e.payload);
+      toast((item ? item.title : 'Remote') + ' ' + tr('refreshSuccess'));
+    });
     window.__TAURI__.event.listen('config_theme_changed', (e) => applyTheme(e.payload));
     window.__TAURI__.event.listen('config_updated', () => {});
   }

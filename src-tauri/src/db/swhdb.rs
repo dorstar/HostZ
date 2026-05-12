@@ -271,6 +271,11 @@ impl SwhDb {
             .transpose()?
             .unwrap_or_default();
 
+        // 拒绝空导入
+        if list.is_empty() && trashcan.is_empty() {
+            return Err(anyhow::anyhow!("导入数据为空，已取消"));
+        }
+
         let tx = self.conn.unchecked_transaction()?;
         tx.execute("DELETE FROM hosts_content", [])?;
         tx.execute("DELETE FROM list_tree", [])?;

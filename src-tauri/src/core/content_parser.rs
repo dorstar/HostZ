@@ -124,6 +124,44 @@ pub fn get_next_selected_item(list: &[HostsListObject], current_id: &str) -> Opt
     list.get(current_idx + 1).map(|item| item.id.clone())
 }
 
+/// 去除 hosts 内容中的重复记录行
+///
+/// 以 (IP, hostname) 对为去重键，首次出现保留，后续重复跳过。
+/// 注释行和空行不受影响。行内 `#` 后的部分不参与去重键计算。
+pub fn remove_duplicate_lines(content: &str) -> String {
+    let mut seen = std::collections::HashSet::new();
+    let mut result = String::with_capacity(content.len());
+    let mut is_first = true;
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            if !is_first {
+                result.push('\n');
+            }
+            result.push_str(line);
+            is_first = false;
+            continue;
+        }
+        let no_comment = trimmed.split('#').next().unwrap_or(trimmed);
+        let parts: Vec<&str> = no_comment.split_whitespace().collect();
+        if parts.len() >= 2 {
+            let key = format!("{} {}", parts[0], parts[1]);
+            if !seen.insert(key) {
+                continue;
+            }
+        }
+        if !is_first {
+            result.push('\n');
+        }
+        result.push_str(line);
+        is_first = false;
+    }
+    if content.ends_with('\n') {
+        result.push('\n');
+    }
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -185,5 +223,38 @@ mod tests {
         let b = find_item_by_id(&result, "b").unwrap();
         assert!(b.on);
         assert!(!a.on); // a was turned off due to single choice
+    }
+
+    #[test]
+    fn test_remove_duplicate_lines_basic() {
+        let content = "127.0.0.1 localhost\n127.0.0.1 localhost\n10.0.0.1 example.com\n";
+        let result = remove_duplicate_lines(content);
+        assert_eq!(result, "127.0.0.1 localhost\n10.0.0.1 example.com\n");
+    }
+
+    #[test]
+    fn test_remove_duplicate_lines_keeps_comments() {
+        let content = "# comment line\n127.0.0.1 a.com\n127.0.0.1 a.com\n# another comment\n";
+        let result = remove_duplicate_lines(content);
+        assert_eq!(result, "# comment line\n127.0.0.1 a.com\n# another comment\n");
+    }
+
+    #[test]
+    fn test_remove_duplicate_lines_different_ip_same_host() {
+        let content = "127.0.0.1 test.com\n10.0.0.1 test.com\n";
+        let result = remove_duplicate_lines(content);
+        assert_eq!(result, "127.0.0.1 test.com\n10.0.0.1 test.com\n"); // different IP, keep both
+    }
+
+    #[test]
+    fn test_remove_duplicate_lines_empty() {
+        assert_eq!(remove_duplicate_lines(""), "");
+    }
+
+    #[test]
+    fn test_remove_duplicate_lines_preserves_newlines() {
+        let content = "\n127.0.0.1 a.com\n\n127.0.0.1 a.com\n\n";
+        let result = remove_duplicate_lines(content);
+        assert_eq!(result, "\n127.0.0.1 a.com\n\n\n");
     }
 }

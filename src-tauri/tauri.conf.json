@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicedoc/tauri/refs/heads/dev/crates/tauri-config-schema/schema.json",
   "productName": "HostZ",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "identifier": "com.hostz.desktop",
   "build": {
     "frontendDist": "../dist",
@@ -36,6 +36,11 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "windows": {
+      "nsis": {
+        "installerHooks": "./nsis/installer.nsh"
+      }
+    }
   }
 }
